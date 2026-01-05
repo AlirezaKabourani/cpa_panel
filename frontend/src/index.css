@@ -66,3 +66,10 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.picker-input {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  width: 240px;
+}

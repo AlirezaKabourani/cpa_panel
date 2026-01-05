@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPostForm } from "../api/client";
 import type { Customer, CustomerMedia, CustomerMessage } from "../api/types";
+import DatePickerModule from "react-multi-date-picker";
+import persian from "react-date-object/calendars/persian";
+import persian_fa from "react-date-object/locales/persian_fa";
+import DateObject from "react-date-object";
+import { DateTime } from "luxon";
+
+const DatePicker =
+  (DatePickerModule as unknown as { default?: typeof DatePickerModule }).default ?? DatePickerModule;
+
+
 
 type NewCustomerPayload = { name: string; service_id: string; code?: string };
 
@@ -79,6 +89,11 @@ export default function CampaignBuilder() {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaType, setMediaType] = useState<"Image" | "Video">("Image");
 
+  const [scheduleAt, setScheduleAt] = useState<DateObject | null>(null);
+  const [scheduledRuns, setScheduledRuns] = useState<any[]>([]);
+  const [campaignName, setCampaignName] = useState<string>("");
+  const [scheduleTime, setScheduleTime] = useState<string>("13:30");
+
 
 
 
@@ -156,6 +171,7 @@ export default function CampaignBuilder() {
 
     try {
       const res = await apiPost<{ campaign_id: string; status: string }>("/campaigns", {
+        name: campaignName.trim(),
         customer_id: selectedCustomer.id,
         audience_snapshot_id: snapshotId,
         selected_file_id: selectedFileId || null,
@@ -240,6 +256,7 @@ export default function CampaignBuilder() {
   useEffect(() => {
     loadCustomers().catch((e) => setStatus(`Error: ${String(e.message || e)}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    refreshScheduledRuns();
   }, []);
 
   useEffect(() => {
@@ -306,6 +323,82 @@ export default function CampaignBuilder() {
     setLastRunLog(`(Could not load log) ${e.message || e}`);
   }
 }
+
+function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
+    const [hhStr, mmStr] = (hhmm || "00:00").split(":");
+    const hh = Number(hhStr) || 0;
+    const mm = Number(mmStr) || 0;
+
+    // Interpret selected date in Tehran timezone, then set time and convert to UTC ISO
+    const base = DateTime.fromJSDate(dateObj.toDate(), { zone: "Asia/Tehran" });
+    return base
+      .set({ hour: hh, minute: mm, second: 0, millisecond: 0 })
+      .toUTC()
+      .toISO()!;
+  }
+
+
+  function formatTehran(isoUtc: string): string {
+    const d = new Date(isoUtc);
+    return new Intl.DateTimeFormat("fa-IR", {
+      timeZone: "Asia/Tehran",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(d);
+  }
+
+
+  async function refreshScheduledRuns() {
+    const rows = await apiGet<any[]>("/scheduled-runs");
+    setScheduledRuns(rows);
+  }
+
+  async function scheduleCampaign() {
+    if (!createdCampaignId) return setStatus("Create campaign first.");
+    if (!scheduleAt) return setStatus("Select date/time first.");
+    if (!token.trim()) return setStatus("Token is required for scheduling.");
+
+    const run_at = tehranPickerToUtcIso(scheduleAt, scheduleTime);
+
+    try {
+      const res = await apiPost<{ scheduled_run_id: string; status: string }>(
+        `/campaigns/${createdCampaignId}/schedule`,
+        { run_at, token }
+      );
+      setStatus(`Scheduled. scheduled_run_id=${res.scheduled_run_id} status=${res.status}`);
+      await refreshScheduledRuns();
+    } catch (e: any) {
+      setStatus(`Schedule failed: ${e.message || e}`);
+    }
+  }
+
+
+  async function runScheduledNowWithToken(id: string) {
+    if (!token.trim()) return setStatus("Token is required (not saved).");
+
+    try {
+      await apiPost(`/scheduled-runs/${id}/run-now-with-token`, { token });
+      setStatus("Token provided. It will execute shortly.");
+      await refreshScheduledRuns();
+    } catch (e: any) {
+      setStatus(`Failed: ${e.message || e}`);
+    }
+  }
+
+  async function cancelScheduledRun(id: string) {
+    try {
+      await apiPost(`/scheduled-runs/${id}/cancel`, {});
+      setStatus("Canceled.");
+      await refreshScheduledRuns();
+    } catch (e: any) {
+      setStatus(`Cancel failed: ${e.message || e}`);
+    }
+  }
+
 
 
   return (
@@ -598,6 +691,12 @@ export default function CampaignBuilder() {
         <h3 style={{ marginTop: 0 }}>Save Campaign</h3>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            value={campaignName}
+            onChange={(e) => setCampaignName(e.target.value)}
+            placeholder='Campaign name (e.g., "sahel_S001")'
+            style={{ padding: 8, borderRadius: 8, minWidth: 260 }}
+          />
           <button onClick={createCampaign} disabled={!selectedCustomer || !snapshotId || !messageText.trim() || !messageText.includes("%s")}>
             Create Campaign (Save Draft)
           </button>
@@ -614,9 +713,6 @@ export default function CampaignBuilder() {
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={createCampaign} disabled={!selectedCustomer || !snapshotId || !messageText.trim() || !messageText.includes("%s")}>
-          Create Campaign (Save Draft)
-        </button>
 
         <button onClick={sendTest} disabled={!createdCampaignId}>
           Send Test
@@ -632,6 +728,96 @@ export default function CampaignBuilder() {
           </div>
         )}
       </div>
+
+      {/* Scheduler */}
+      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Scheduler</h3>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <DatePicker
+            value={scheduleAt}
+            onChange={(v) => setScheduleAt(v as DateObject)}
+            calendar={persian}
+            locale={persian_fa}
+            format="YYYY/MM/DD"
+            inputClass="picker-input"
+            style={{ padding: 8, borderRadius: 8 }}
+          />
+
+          <input
+            type="time"
+            value={scheduleTime}
+            onChange={(e) => setScheduleTime(e.target.value)}
+            style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
+          />
+
+
+          <button onClick={scheduleCampaign} disabled={!createdCampaignId || !scheduleAt}>
+            Schedule
+          </button>
+
+          <button onClick={refreshScheduledRuns}>
+            Refresh list
+          </button>
+        </div>
+
+
+        {/* List */}
+        <div style={{ marginTop: 12, overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th align="left" style={{ borderBottom: "1px solid #eee", padding: "6px 0" }}>Run At (Tehran)</th>
+                <th align="left" style={{ borderBottom: "1px solid #eee", padding: "6px 0" }}>Customer</th>
+                <th align="left" style={{ borderBottom: "1px solid #eee", padding: "6px 0" }}>Campaign Name</th>                
+                <th align="left" style={{ borderBottom: "1px solid #eee", padding: "6px 0" }}>Status</th>
+                <th align="left" style={{ borderBottom: "1px solid #eee", padding: "6px 0" }}>Campaign ID</th>
+                <th align="left" style={{ borderBottom: "1px solid #eee", padding: "6px 0" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scheduledRuns.map((r) => (
+                <tr key={r.id} style={{ borderBottom: "1px solid #f4f4f4" }}>
+                  <td style={{ padding: "6px 0", fontFamily: "monospace", fontSize: 12 }}>{formatTehran(r.run_at)}</td>
+                  <td style={{ padding: "6px 0" }}>{r.customer_name || "-"}</td>
+                  <td style={{ padding: "6px 0" }}>{r.campaign_name || "-"}</td>
+                  <td style={{ padding: "6px 0" }}>
+                    {r.status}{r.has_token ? " 🔐" : ""}
+                  </td>
+                  <td style={{ padding: "6px 0", fontFamily: "monospace", fontSize: 12 }}>{r.campaign_id}</td>
+                  <td style={{ padding: "6px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {r.status === "waiting_token" && (
+                      <button onClick={() => runScheduledNowWithToken(r.id)}>
+                        Run now with token
+                      </button>
+                    )}
+                    {["scheduled", "waiting_token"].includes(r.status) && (
+                      <button onClick={() => cancelScheduledRun(r.id)}>
+                        Cancel
+                      </button>
+                    )}
+                    {r.last_run_id && (
+                      <button onClick={() => window.open(`http://127.0.0.1:8000/api/runs/${r.last_run_id}/log/download`, "_blank")}>
+                        Download log
+                      </button>
+                    )}
+                    {r.last_run_id && (
+                      <button onClick={() => window.open(`http://127.0.0.1:8000/api/runs/${r.last_run_id}/result/download`, "_blank")}>
+                        Download Result
+                      </button>
+                    )}
+
+                  </td>
+                </tr>
+              ))}
+              {scheduledRuns.length === 0 && (
+                <tr><td colSpan={4} style={{ padding: "10px 0", color: "#666" }}>No scheduled runs.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
 
 
       {/* Run Log Viewer */}

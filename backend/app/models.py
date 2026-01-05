@@ -40,6 +40,7 @@ class AudienceSnapshot(Base):
 class Campaign(Base):
     __tablename__ = "campaigns"
     id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=True, index=True)
     customer_id = Column(String, index=True, nullable=False)
     audience_snapshot_id = Column(String, index=True, nullable=True)
     selected_file_id = Column(String, nullable=True)
@@ -66,3 +67,20 @@ class Run(Base):
     log_path = Column(String, nullable=True)
     artifacts_path = Column(String, nullable=True)
     result_json = Column(Text, nullable=True)
+
+
+class ScheduledRun(Base):
+    __tablename__ = "scheduled_runs"
+
+    id = Column(String, primary_key=True)
+    campaign_id = Column(String, nullable=False, index=True)
+    run_at = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="scheduled")  # scheduled|waiting_token|running|success|failed|canceled
+    customer_name = Column(String, nullable=True, index=True)
+    campaign_name = Column(String, nullable=True, index=True)
+    token_plain = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    # link to last Run id
+    last_run_id = Column(String, nullable=True)

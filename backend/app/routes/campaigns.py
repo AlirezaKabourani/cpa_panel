@@ -20,6 +20,7 @@ def list_campaigns(db: Session = Depends(get_db)):
     rows = db.query(Campaign).order_by(Campaign.created_at.desc()).limit(200).all()
     return [{
         "id": r.id,
+        "name": r.name,
         "customer_id": r.customer_id,
         "audience_snapshot_id": r.audience_snapshot_id,
         "selected_file_id": r.selected_file_id,
@@ -31,6 +32,8 @@ def list_campaigns(db: Session = Depends(get_db)):
 def create_campaign(payload: dict, db: Session = Depends(get_db)):
     customer_id = payload.get("customer_id")
     snapshot_id = payload.get("audience_snapshot_id")
+    name = payload.get("name")
+    if isinstance(name, str): name = name.strip() or None
     message_text = payload.get("message_text")
     selected_file_id = payload.get("selected_file_id")
     test_number = payload.get("test_number")
@@ -53,6 +56,7 @@ def create_campaign(payload: dict, db: Session = Depends(get_db)):
     cid = str(uuid.uuid4())
     c = Campaign(
         id=cid,
+        name=name,
         customer_id=customer_id,
         audience_snapshot_id=snapshot_id,
         selected_file_id=selected_file_id,
@@ -73,6 +77,7 @@ def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="not found")
     return {
         "id": c.id,
+        "name": c.name,
         "customer_id": c.customer_id,
         "audience_snapshot_id": c.audience_snapshot_id,
         "selected_file_id": c.selected_file_id,
