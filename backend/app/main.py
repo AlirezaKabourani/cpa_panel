@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, engine
-from .routes import health, customers, audience, campaigns, runs, media_upload, schedule
+from .routes import health, customers, audience, campaigns, runs, media_upload, schedule, dashboard
 from .scheduler import start_scheduler
 from contextlib import asynccontextmanager
 
@@ -39,6 +39,7 @@ app.include_router(campaigns.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(media_upload.router, prefix="/api")
 app.include_router(schedule.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
 
 
 
