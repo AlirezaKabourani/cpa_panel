@@ -42,14 +42,24 @@ def download_run_result(run_id: str, db: Session = Depends(get_db)):
     if not r or not r.artifacts_path:
         raise HTTPException(status_code=404, detail="run not found")
 
-    csv_path = os.path.join(r.artifacts_path, "rubika_message_log.csv")
-    if not os.path.exists(csv_path):
+    candidates = [
+        "rubika_message_log.csv",
+        "splus_message_log.csv",
+    ]
+    csv_path = None
+    for name in candidates:
+        p = os.path.join(r.artifacts_path, name)
+        if os.path.exists(p):
+            csv_path = p
+            break
+
+    if not csv_path:
         raise HTTPException(status_code=404, detail="result csv not found")
 
     return FileResponse(
         path=csv_path,
         media_type="text/csv",
-        filename=f"rubika_message_log_{run_id}.csv",
+        filename=f"message_log_{run_id}.csv",
     )
 
 

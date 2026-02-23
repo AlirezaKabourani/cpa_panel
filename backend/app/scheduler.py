@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .db import SessionLocal
 from .models import ScheduledRun, Campaign, Customer, AudienceSnapshot, Run
 from .runners.rscript_runner import run_r_campaign
+from .runners.splus_runner import run_splus_campaign
 
 scheduler = BackgroundScheduler()
 
@@ -76,16 +77,27 @@ def process_due_scheduled_runs():
             sr.last_run_id = run_row.id
             db.commit()
 
-            out = run_r_campaign(
-                mode="send",
-                rubica_token=sr.token_plain,
-                snapshot_path=snap.stored_path,
-                service_id=cust.service_id,
-                file_id=c.selected_file_id,
-                message_text=c.message_text,
-                test_number=None,
-                run_id=run_row.id,
-            )
+            if c.platform == "splus":
+                out = run_splus_campaign(
+                    mode="send",
+                    splus_bot_id=sr.token_plain,
+                    snapshot_path=snap.stored_path,
+                    file_id=c.selected_file_id,
+                    message_text=c.message_text,
+                    test_number=None,
+                    run_id=run_row.id,
+                )
+            else:
+                out = run_r_campaign(
+                    mode="send",
+                    rubica_token=sr.token_plain,
+                    snapshot_path=snap.stored_path,
+                    service_id=cust.service_id,
+                    file_id=c.selected_file_id,
+                    message_text=c.message_text,
+                    test_number=None,
+                    run_id=run_row.id,
+                )
 
             run_row.log_path = out.get("log_path")
             run_row.artifacts_path = out.get("run_dir")

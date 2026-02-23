@@ -837,108 +837,157 @@ send_rubika_in_batches_parallel <- function(df,
                                             log_path_csv = "rubika_message_log.csv",
                                             file_id      = NULL,
                                             sleep_sec    = 0.2) {
-  
+
+  suppressPackageStartupMessages({
+    library(future)
+    library(future.apply)
+    library(progressr)
+    library(filelock)
+  })
+
   n <- nrow(df)
   if (n == 0) {
     message("No rows to send.")
-    return(invisible(NULL))
+    return(invisible(list()))
   }
-  
+
   batch_ids <- split(seq_len(n), ceiling(seq_len(n) / batch_size))
   total_batches <- length(batch_ids)
-  
+
   message(sprintf(
     "Starting PARALLEL send: %d batches × %d workers × %d msgs/batch",
     total_batches, workers, batch_size
   ))
-  
-  plan(multisession, workers = workers)
-  
+
+  # Always restore plan even if something goes wrong
+  old_plan <- future::plan()
+  on.exit(future::plan(old_plan), add = TRUE)
+
+  future::plan(multisession, workers = workers)
+
   progressr::handlers(global = TRUE)
-  progressr::with_progress({
+
+  results <- progressr::with_progress({
     p <- progressr::progressor(steps = total_batches)
-    
-    future_lapply(seq_along(batch_ids), function(b) {
-      
+
+    future.apply::future_lapply(seq_along(batch_ids), function(b) {
       idx <- batch_ids[[b]]
       batch_df <- df[idx, , drop = FALSE]
       batch_time <- Sys.time()
-      
-      # 1) Build messages
-      messages <- make_messages_from_df(
-        df            = batch_df,
-        text_template = text_template,
-        file_id       = file_id
-      )
-      
-      # 2) Send
-      send_res <- rubika_send_bulk_messages(
-        token      = token,
-        service_id = service_id,
-        messages   = messages
-      )
-      
-      status_val <- if (!is.null(send_res$status)) send_res$status else NA_character_
-      data_status_val <- if (!is.null(send_res$data) && !is.null(send_res$data$status)) {
-        send_res$data$status
-      } else {
-        NA_character_
+
+      # helper: safe locked csv append
+      safe_write_log <- function(log_df) {
+        lock <- filelock::lock(paste0(log_path_csv, ".lock"))
+        on.exit(filelock::unlock(lock), add = TRUE)
+        save_rubika_log(log_df, log_path_csv)
       }
-      
-      # 3) Build log
-      msl <- send_res$data$message_status_list
-      
-      msl_ok <- !is.null(msl) &&
-        is.data.frame(msl) &&
-        nrow(msl) > 0 &&
-        "message_id" %in% names(msl) &&
-        any(!is.na(msl$message_id) & msl$message_id != "")
-      
-      if (!msl_ok) {
-        
+
+      out <- tryCatch({
+
+        # 1) Build messages
+        messages <- make_messages_from_df(
+          df            = batch_df,
+          text_template = text_template,
+          file_id       = file_id
+        )
+
+        # 2) Send (this is where timeouts often happen)
+        send_res <- rubika_send_bulk_messages(
+          token      = token,
+          service_id = service_id,
+          messages   = messages
+        )
+
+        status_val <- if (!is.null(send_res$status)) send_res$status else NA_character_
+        data_status_val <- if (!is.null(send_res$data) && !is.null(send_res$data$status)) {
+          send_res$data$status
+        } else {
+          NA_character_
+        }
+
+        # 3) Build log
+        msl <- send_res$data$message_status_list
+
+        msl_ok <- !is.null(msl) &&
+          is.data.frame(msl) &&
+          nrow(msl) > 0 &&
+          "message_id" %in% names(msl) &&
+          any(!is.na(msl$message_id) & msl$message_id != "")
+
+        if (!msl_ok) {
+
+          log_df <- build_rubika_error_log(
+            batch_df        = batch_df,
+            scenario        = scenario,
+            send_datetime   = batch_time,
+            file_id         = file_id,
+            status_val      = status_val,
+            data_status_val = data_status_val
+          )
+
+        } else {
+
+          msg_ids <- msl$message_id
+
+          status_res <- tryCatch(
+            rubika_get_messages_status(token, msg_ids),
+            error = function(e) NULL
+          )
+
+          log_df <- build_rubika_log(
+            send_result   = send_res,
+            status_result = status_res,
+            scenario      = scenario,
+            send_datetime = batch_time
+          )
+        }
+
+        # 4) SAFE CSV WRITE (lock)
+        safe_write_log(log_df)
+
+        if (sleep_sec > 0) Sys.sleep(sleep_sec)
+
+        # Progress update (only after the batch is done)
+        p(sprintf("Batch %d/%d", b, total_batches))
+
+        list(ok = TRUE, batch = b, n = nrow(batch_df))
+
+      }, error = function(e) {
+
+        # IMPORTANT: DO NOT STOP. Log error batch and continue.
+        err_msg <- conditionMessage(e)
+        warning(sprintf("Batch %d failed: %s", b, err_msg))
+
+        # Build an error log for *this* batch so resume can skip these numbers if you want.
+        # If you prefer retrying failed ones later, we can log differently (e.g., error-only flag).
         log_df <- build_rubika_error_log(
           batch_df        = batch_df,
           scenario        = scenario,
           send_datetime   = batch_time,
           file_id         = file_id,
-          status_val      = status_val,
-          data_status_val = data_status_val
+          status_val      = "EXCEPTION",
+          data_status_val = err_msg
         )
-        
-      } else {
-        
-        msg_ids <- msl$message_id
-        
-        status_res <- tryCatch(
-          rubika_get_messages_status(token, msg_ids),
-          error = function(e) NULL
-        )
-        
-        log_df <- build_rubika_log(
-          send_result   = send_res,
-          status_result = status_res,
-          scenario      = scenario,
-          send_datetime = batch_time
-        )
-      }
-      
-      
-      # 4) SAFE CSV WRITE (lock)
-      lock <- filelock::lock(paste0(log_path_csv, ".lock"))
-      on.exit(filelock::unlock(lock), add = TRUE)
-      save_rubika_log(log_df, log_path_csv)
-      
-      if (sleep_sec > 0) Sys.sleep(sleep_sec)
-      
-      # ✅ report progress from worker to main session
-      p(sprintf("Batch %d/%d", b, total_batches))
-      
-      invisible(TRUE)
+
+        # Even log-writing can fail; guard it too
+        tryCatch(safe_write_log(log_df), error = function(e2) {
+          warning(sprintf("Batch %d: failed to write error log: %s", b, conditionMessage(e2)))
+        })
+
+        if (sleep_sec > 0) Sys.sleep(sleep_sec)
+
+        # Still advance progress so UI doesn't freeze at this batch
+        p(sprintf("Batch %d/%d (failed)", b, total_batches))
+
+        list(ok = FALSE, batch = b, n = nrow(batch_df), error = err_msg)
+      })
+
+      out
     }, future.seed = TRUE)
   })
-  
-  plan(sequential)
+
   message("✅ Parallel sending finished.")
+  invisible(results)
 }
 
 

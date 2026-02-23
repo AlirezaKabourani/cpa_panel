@@ -91,10 +91,21 @@ def create_customer_message(customer_id: str, payload: dict, db: Session = Depen
     return {"id": m.id}
 
 @router.get("/customers/{customer_id}/media")
-def list_customer_media(customer_id: str, db: Session = Depends(get_db)):
-    rows = db.query(CustomerMedia).filter(CustomerMedia.customer_id == customer_id).order_by(CustomerMedia.created_at.desc()).all()
+def list_customer_media(customer_id: str, platform: str = "rubika", db: Session = Depends(get_db)):
+    p = str(platform or "rubika").strip().lower()
+    if p not in ("rubika", "splus"):
+        raise HTTPException(status_code=400, detail="platform must be rubika or splus")
+
+    rows = (
+        db.query(CustomerMedia)
+        .filter(CustomerMedia.customer_id == customer_id)
+        .filter(CustomerMedia.platform == p)
+        .order_by(CustomerMedia.created_at.desc())
+        .all()
+    )
     return [{
         "id": r.id,
+        "platform": r.platform,
         "file_id": r.file_id,
         "file_name": r.file_name,
         "file_type": r.file_type,

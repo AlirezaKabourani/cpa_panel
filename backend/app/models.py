@@ -22,6 +22,7 @@ class CustomerMedia(Base):
     __tablename__ = "customer_media"
     id = Column(String, primary_key=True, index=True)
     customer_id = Column(String, index=True, nullable=False)
+    platform = Column(String, nullable=False, default="rubika", index=True)
     file_id = Column(String, nullable=False)
     file_name = Column(String, nullable=True)
     file_type = Column(String, nullable=True)  # Image/Video
@@ -41,6 +42,7 @@ class Campaign(Base):
     __tablename__ = "campaigns"
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=True, index=True)
+    platform = Column(String, nullable=False, default="rubika", index=True)
     customer_id = Column(String, index=True, nullable=False)
     audience_snapshot_id = Column(String, index=True, nullable=True)
     selected_file_id = Column(String, nullable=True)

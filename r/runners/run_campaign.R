@@ -44,6 +44,11 @@ media_path    <- get_arg("--media_path", NA_character_)   # upload_media
 media_type    <- get_arg("--media_type", NA_character_)   # upload_media: Image | Video
 result_json   <- get_arg("--result_json", NA_character_)  # upload_media output json path
 
+# Add new CLI args
+resume      <- tolower(get_arg("--resume", "true")) %in% c("1","true","yes")
+max_rounds  <- as.integer(get_arg("--max_rounds", "20"))
+min_sleep_round <- as.numeric(get_arg("--sleep_round_sec", "5"))
+
 # ---- token ------------------------------------------------------------------
 
 token <- Sys.getenv("RUBICA_TOKEN", unset = NA_character_)
@@ -76,6 +81,24 @@ if (basename(script_dir) == "runners") {
 source(file.path(project_root, "r", "lib", "rubicafunctions.R"))
 
 # ---- helpers ----------------------------------------------------------------
+suppressPackageStartupMessages({
+  library(data.table)
+})
+
+read_progress_numbers <- function(log_csv) {
+  if (!file.exists(log_csv)) return(character())
+  x <- tryCatch(fread(log_csv, showProgress = FALSE), error = function(e) NULL)
+  if (is.null(x) || !"phone_number" %in% names(x)) return(character())
+
+  nums <- unique(as.character(x$phone_number))
+  nums <- gsub("^'+", "", nums)   # <-- ADD THIS LINE (removes Excel leading quote)
+  nums
+}
+
+anti_join_progress <- function(df, sent_nums) {
+  if (length(sent_nums) == 0) return(df)
+  df[!(as.character(df$phone_number) %in% sent_nums), , drop = FALSE]
+}
 
 read_snapshot <- function(path) {
   if (is.na(path) || path == "") stop("--snapshot is required")
@@ -196,24 +219,60 @@ handle_send <- function() {
   if (is.na(service_id) || service_id == "") stop("--service_id is required")
   if (is.na(message_text) || message_text == "") stop("--message_file is required (and must not be empty)")
 
-  df <- read_snapshot(snapshot_path)
-  if (nrow(df) == 0) stop("No valid rows in snapshot after cleaning")
+  # df0 = full original audience (never changes)
+  df0 <- read_snapshot(snapshot_path)
+  if (nrow(df0) == 0) stop("No valid rows in snapshot after cleaning")
 
-  send_rubika_in_batches_parallel(
-    df            = df,
-    token         = token,
-    service_id    = service_id,
-    text_template = message_text,
-    scenario      = "CPA_Panel_SEND",
-    batch_size    = batch_size,
-    workers       = workers,
-    log_path_csv  = log_csv,
-    file_id       = norm_file_id(file_id),
-    sleep_sec     = sleep_sec
-  )
+  remaining <- df0
 
-  cat("OK: campaign sent\n")
+  if (resume) {
+    sent_nums <- read_progress_numbers(log_csv)
+    remaining <- anti_join_progress(df0, sent_nums)
+    cat(sprintf("RESUME: already logged=%d, remaining=%d\n", length(sent_nums), nrow(remaining)))
+  }
+
+  round <- 1
+  repeat {
+    if (nrow(remaining) == 0) {
+      cat("✅ All rows completed (nothing left to send).\n")
+      cat("OK: campaign sent\n")
+      break
+    }
+    if (round > max_rounds) {
+      cat(sprintf("❌ Reached max_rounds=%d with remaining=%d\n", max_rounds, nrow(remaining)))
+      break
+    }
+
+    cat(sprintf("\n=== ROUND %d === remaining=%d\n", round, nrow(remaining)))
+
+    # IMPORTANT: send_rubika_in_batches_parallel MUST NOT stop the whole process on one batch failure.
+    # It should try/catch per batch and continue.
+    send_rubika_in_batches_parallel(
+      df            = remaining,
+      token         = token,
+      service_id    = service_id,
+      text_template = message_text,
+      scenario      = "CPA_Panel_SEND",
+      batch_size    = batch_size,
+      workers       = workers,
+      log_path_csv  = log_csv,
+      file_id       = norm_file_id(file_id),
+      sleep_sec     = sleep_sec
+    )
+
+    # recompute remaining based on progress log
+    sent_nums <- read_progress_numbers(log_csv)
+    remaining2 <- anti_join_progress(df0, sent_nums)
+
+    cat(sprintf("After ROUND %d: logged=%d, remaining=%d\n",
+                round, length(sent_nums), nrow(remaining2)))
+
+    remaining <- remaining2
+    round <- round + 1
+    Sys.sleep(min_sleep_round)
+  }
 }
+
 
 # ---- main -------------------------------------------------------------------
 

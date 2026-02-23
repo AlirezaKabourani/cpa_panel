@@ -43,6 +43,29 @@ function Modal(props: { open: boolean; title: string; onClose: () => void; child
 }
 
 export default function CampaignBuilder() {
+  const [platform, setPlatform] = useState<"rubika" | "splus">("rubika");
+  const theme = useMemo(
+    () =>
+      platform === "rubika"
+        ? {
+            pageBg:
+              "linear-gradient(120deg, rgba(255,120,150,0.10), rgba(255,205,86,0.10), rgba(120,220,255,0.10), rgba(160,130,255,0.10))",
+            cardBg: "#fffdfd",
+            border: "#f2cde2",
+            statusBg: "#fff7ff",
+            statusBorder: "#efb6df",
+          }
+        : {
+            pageBg: "linear-gradient(160deg, rgba(59,130,246,0.16), rgba(191,219,254,0.14), rgba(239,246,255,0.20))",
+            cardBg: "#f8fbff",
+            border: "#bfdbfe",
+            statusBg: "#eff6ff",
+            statusBorder: "#93c5fd",
+          },
+    [platform]
+  );
+  const cardStyle = { border: `1px solid ${theme.border}`, background: theme.cardBg, borderRadius: 12, padding: 12 };
+
   // Security: token is local-only, never stored
   const [token, setToken] = useState("");
 
@@ -130,11 +153,12 @@ export default function CampaignBuilder() {
     if (!token.trim()) return setStatus("Token is required (not saved).");
     if (!mediaFile) return setStatus("Choose a media file first.");
 
-    setStatus("Uploading media to Rubica...");
+    setStatus(`Uploading media to ${platform === "rubika" ? "Rubika" : "SPlus"}...`);
     try {
       const fd = new FormData();
       fd.append("token", token);
       fd.append("file_type", mediaType);
+      fd.append("platform", platform);
       fd.append("file", mediaFile);
 
       const res = await apiPostForm<{ media_id: string; file_id: string }>(
@@ -172,6 +196,7 @@ export default function CampaignBuilder() {
     try {
       const res = await apiPost<{ campaign_id: string; status: string }>("/campaigns", {
         name: campaignName.trim(),
+        platform,
         customer_id: selectedCustomer.id,
         audience_snapshot_id: snapshotId,
         selected_file_id: selectedFileId || null,
@@ -195,7 +220,7 @@ export default function CampaignBuilder() {
   async function loadCustomerExtras(customerId: string) {
     const [m, med] = await Promise.all([
       apiGet<CustomerMessage[]>(`/customers/${customerId}/messages`),
-      apiGet<CustomerMedia[]>(`/customers/${customerId}/media`),
+      apiGet<CustomerMedia[]>(`/customers/${customerId}/media?platform=${platform}`),
     ]);
     setMessages(m);
     setMedia(med);
@@ -262,7 +287,7 @@ export default function CampaignBuilder() {
   useEffect(() => {
     if (!selectedCustomerId) return;
     loadCustomerExtras(selectedCustomerId).catch((e) => setStatus(`Error: ${String(e.message || e)}`));
-  }, [selectedCustomerId]);
+  }, [selectedCustomerId, platform]);
 
   useEffect(() => {
     const msg = messages.find((x) => x.id === selectedMessageId);
@@ -402,21 +427,33 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
 
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div style={{ display: "grid", gap: 16, background: theme.pageBg, padding: 14, borderRadius: 14 }}>
+      <div style={cardStyle}>
+        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Social Media</h3>
+        <select
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value as "rubika" | "splus")}
+          style={{ padding: 8, borderRadius: 8, minWidth: 220 }}
+        >
+          <option value="rubika">Rubika</option>
+          <option value="splus">SPlus</option>
+        </select>
+      </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>Create Campaign (Step 1)</h2>
         <button onClick={() => setAddOpen(true)}>+ Add customer</button>
       </div>
 
       {status && (
-        <div style={{ padding: 10, background: "#fff3cd", border: "1px solid #ffeeba", borderRadius: 8 }}>
+        <div style={{ padding: 10, background: theme.statusBg, border: `1px solid ${theme.statusBorder}`, borderRadius: 8 }}>
           {status}
         </div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {/* Customer + token */}
-        <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <div style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>Customer + Security</h3>
 
           <div style={{ display: "grid", gap: 8 }}>
@@ -437,17 +474,13 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
               </div>
             </label>
 
-            <div style={{ fontSize: 12, color: "#666" }}>
-              Service ID (auto): <span style={{ fontFamily: "monospace" }}>{selectedCustomer?.service_id || "-"}</span>
-            </div>
-
             <label>
-              Rubica Token (not saved)
+              {platform === "rubika" ? "Rubika Token (not saved)" : "SPlus Bot ID (not saved)"}
               <input
                 type="password"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Paste token each run..."
+                placeholder={platform === "rubika" ? "Paste token each run..." : "Paste SPlus bot_id each run..."}
                 style={{ width: "100%", padding: 8, borderRadius: 8 }}
               />
             </label>
@@ -462,7 +495,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
             </label>
 
             <div style={{ fontSize: 12, color: "#666" }}>
-              (Send test will be wired in Step 4 when R runner is connected.)
+              Token is never stored and is required for send test / run now / schedule.
             </div>
           </div>
         </div>
@@ -488,7 +521,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
           </div>
         )}
 
-        <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <div style={cardStyle}>
           <h3 style={{ marginTop: 0 }}>Customer Media (file_id)</h3>
           <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -512,16 +545,13 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
               </button>
             </div>
 
-            <div style={{ fontSize: 12, color: "#666" }}>
-              Upload will call Rubica requestUploadFile + uploadFile and save the returned file_id for this customer.
-            </div>
           </div>
 
           
           {!selectedCustomer ? (
             <div style={{ color: "#666" }}>Select a customer.</div>
           ) : media.length === 0 ? (
-            <div style={{ color: "#666" }}>No media saved for this customer yet.</div>
+            <div style={{ color: "#666" }} />
           ) : (
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {media.map((m) => (
@@ -533,14 +563,11 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
               ))}
             </ul>
           )}
-          <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
-            Upload media will be implemented in Step 5 (requires token + R upload mode).
-          </div>
         </div>
       </div>
 
       {/* Audience upload */}
-<div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+<div style={cardStyle}>
   <h3 style={{ marginTop: 0 }}>Audience (Upload XLSX/CSV)</h3>
 
   <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -606,7 +633,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
 
 
       {/* Message suggestions + editor */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+      <div style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>Message</h3>
 
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 12 }}>
@@ -652,7 +679,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
             />
             {!messageText.includes("%s") && (
               <div style={{ marginTop: 8, color: "#b45309", fontSize: 13 }}>
-                ⚠️ Your message does not include <code>%s</code>. Rubica needs it to inject the link.
+                ⚠️ Your message does not include <code>%s</code>. The selected platform needs it to inject the link.
               </div>
             )}
 
@@ -687,7 +714,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
 
 
       {/* Save campaign */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+      <div style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>Save Campaign</h3>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -730,7 +757,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
       </div>
 
       {/* Scheduler */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+      <div style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>Scheduler</h3>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -821,7 +848,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
 
 
       {/* Run Log Viewer */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+      <div style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>Last Run Log</h3>
 
         {!lastRunId ? (

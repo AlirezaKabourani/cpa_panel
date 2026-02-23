@@ -1,19 +1,25 @@
 import uuid
 from datetime import datetime, timezone
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-import json
-from datetime import datetime, timezone
-from ..models import Run, Customer, AudienceSnapshot
-from ..runners.rscript_runner import run_r_campaign
 
 from ..db import get_db
-from ..models import Campaign, Customer, AudienceSnapshot
+from ..models import Campaign, Run, Customer, AudienceSnapshot
+from ..runners.rscript_runner import run_r_campaign
+from ..runners.splus_runner import run_splus_campaign
 
 router = APIRouter()
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def normalize_platform(raw: object) -> str:
+    p = str(raw or "rubika").strip().lower()
+    if p not in ("rubika", "splus"):
+        raise HTTPException(status_code=400, detail="platform must be rubika or splus")
+    return p
 
 @router.get("/campaigns")
 def list_campaigns(db: Session = Depends(get_db)):
@@ -21,6 +27,7 @@ def list_campaigns(db: Session = Depends(get_db)):
     return [{
         "id": r.id,
         "name": r.name,
+        "platform": r.platform,
         "customer_id": r.customer_id,
         "audience_snapshot_id": r.audience_snapshot_id,
         "selected_file_id": r.selected_file_id,
@@ -37,6 +44,7 @@ def create_campaign(payload: dict, db: Session = Depends(get_db)):
     message_text = payload.get("message_text")
     selected_file_id = payload.get("selected_file_id")
     test_number = payload.get("test_number")
+    platform = normalize_platform(payload.get("platform"))
 
     if not customer_id:
         raise HTTPException(status_code=400, detail="customer_id is required")
@@ -57,6 +65,7 @@ def create_campaign(payload: dict, db: Session = Depends(get_db)):
     c = Campaign(
         id=cid,
         name=name,
+        platform=platform,
         customer_id=customer_id,
         audience_snapshot_id=snapshot_id,
         selected_file_id=selected_file_id,
@@ -78,6 +87,7 @@ def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
     return {
         "id": c.id,
         "name": c.name,
+        "platform": c.platform,
         "customer_id": c.customer_id,
         "audience_snapshot_id": c.audience_snapshot_id,
         "selected_file_id": c.selected_file_id,
@@ -120,16 +130,27 @@ def send_test(campaign_id: str, payload: dict, db: Session = Depends(get_db)):
     db.commit()
 
     try:
-        out = run_r_campaign(
-            mode="test",
-            rubica_token=str(token),
-            snapshot_path=snap.stored_path,
-            service_id=cust.service_id,
-            file_id=c.selected_file_id,
-            message_text=c.message_text,
-            test_number=str(test_number) if test_number else (c.test_number or "989024004940"),
-            run_id=rid,
-        )
+        if c.platform == "splus":
+            out = run_splus_campaign(
+                mode="test",
+                splus_bot_id=str(token),
+                snapshot_path=snap.stored_path,
+                file_id=c.selected_file_id,
+                message_text=c.message_text,
+                test_number=str(test_number) if test_number else (c.test_number or "989024004940"),
+                run_id=rid,
+            )
+        else:
+            out = run_r_campaign(
+                mode="test",
+                rubica_token=str(token),
+                snapshot_path=snap.stored_path,
+                service_id=cust.service_id,
+                file_id=c.selected_file_id,
+                message_text=c.message_text,
+                test_number=str(test_number) if test_number else (c.test_number or "989024004940"),
+                run_id=rid,
+            )
 
         r.log_path = out["log_path"]
         r.artifacts_path = out["run_dir"]
@@ -183,16 +204,27 @@ def run_now(campaign_id: str, payload: dict, db: Session = Depends(get_db)):
     db.commit()
 
     try:
-        out = run_r_campaign(
-            mode="send",
-            rubica_token=str(token),
-            snapshot_path=snap.stored_path,
-            service_id=cust.service_id,
-            file_id=c.selected_file_id,
-            message_text=c.message_text,
-            test_number=None,
-            run_id=rid,
-        )
+        if c.platform == "splus":
+            out = run_splus_campaign(
+                mode="send",
+                splus_bot_id=str(token),
+                snapshot_path=snap.stored_path,
+                file_id=c.selected_file_id,
+                message_text=c.message_text,
+                test_number=None,
+                run_id=rid,
+            )
+        else:
+            out = run_r_campaign(
+                mode="send",
+                rubica_token=str(token),
+                snapshot_path=snap.stored_path,
+                service_id=cust.service_id,
+                file_id=c.selected_file_id,
+                message_text=c.message_text,
+                test_number=None,
+                run_id=rid,
+            )
 
         r.log_path = out["log_path"]
         r.artifacts_path = out["run_dir"]

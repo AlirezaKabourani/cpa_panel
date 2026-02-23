@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import Base, engine
+from .db import Base, engine, ensure_sqlite_schema_compat
 from .routes import health, customers, audience, campaigns, runs, media_upload, schedule, dashboard
 from .scheduler import start_scheduler
 from contextlib import asynccontextmanager
 
 Base.metadata.create_all(bind=engine)
+ensure_sqlite_schema_compat()
 
 @asynccontextmanager
 async def lifespan(app):

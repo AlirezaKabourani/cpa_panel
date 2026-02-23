@@ -16,6 +16,7 @@ export type CustomerMessage = {
 
 export type CustomerMedia = {
   id: string;
+  platform?: "rubika" | "splus";
   file_id: string;
   file_name?: string | null;
   file_type?: string | null;

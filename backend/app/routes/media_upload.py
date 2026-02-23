@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Customer, CustomerMedia
 from ..runners.rscript_runner import run_r_upload_media
+from ..runners.splus_runner import run_splus_upload_media
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 UPLOADS_DIR = PROJECT_ROOT / "data" / "uploads"
@@ -22,9 +23,14 @@ async def upload_customer_media(
     customer_id: str,
     token: str = Form(...),                      # NOT stored
     file_type: str = Form(...),                  # "Image" or "Video"
+    platform: str = Form("rubika"),              # rubika | splus
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    platform = str(platform or "rubika").strip().lower()
+    if platform not in ("rubika", "splus"):
+        raise HTTPException(status_code=400, detail="platform must be rubika or splus")
+
     if file_type not in ("Image", "Video"):
         raise HTTPException(status_code=400, detail="file_type must be Image or Video")
 
@@ -49,12 +55,19 @@ async def upload_customer_media(
         shutil.copyfileobj(file.file, f)
 
     run_id = str(uuid.uuid4())
-    out = run_r_upload_media(
-        rubica_token=token.strip(),
-        media_path=str(local_path),
-        media_type=file_type,
-        run_id=run_id,
-    )
+    if platform == "splus":
+        out = run_splus_upload_media(
+            splus_bot_id=token.strip(),
+            media_path=str(local_path),
+            run_id=run_id,
+        )
+    else:
+        out = run_r_upload_media(
+            rubica_token=token.strip(),
+            media_path=str(local_path),
+            media_type=file_type,
+            run_id=run_id,
+        )
 
     result = out.get("result") or {}
     if not result.get("ok"):
@@ -71,6 +84,7 @@ async def upload_customer_media(
     media = CustomerMedia(
         id=str(uuid.uuid4()),
         customer_id=customer_id,
+        platform=platform,
         file_id=file_id,
         file_name=file.filename,
         file_type=file_type,
@@ -81,6 +95,7 @@ async def upload_customer_media(
 
     return {
         "media_id": media.id,
+        "platform": media.platform,
         "file_id": file_id,
         "file_name": media.file_name,
         "file_type": media.file_type,
