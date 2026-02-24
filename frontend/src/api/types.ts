@@ -3,6 +3,7 @@ export type Customer = {
   code: string;
   name: string;
   service_id: string;
+  default_splus_token?: string | null;
   created_at: string;
 };
 

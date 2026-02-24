@@ -28,6 +28,9 @@ def ensure_sqlite_schema_compat():
         if has_col("customer_media", "id") and not has_col("customer_media", "platform"):
             conn.execute(text("ALTER TABLE customer_media ADD COLUMN platform TEXT NOT NULL DEFAULT 'rubika'"))
 
+        if has_col("customers", "id") and not has_col("customers", "default_splus_token"):
+            conn.execute(text("ALTER TABLE customers ADD COLUMN default_splus_token TEXT"))
+
 def get_db():
     db = SessionLocal()
     try:

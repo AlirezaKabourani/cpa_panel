@@ -15,6 +15,9 @@ export default function Layout() {
           <Link to="/campaign" style={{ textDecoration: "none", color: "#111", ...active("/campaign") }}>
             Create Campaign
           </Link>
+          <Link to="/customers" style={{ textDecoration: "none", color: "#111", ...active("/customers") }}>
+            Customers
+          </Link>
         </nav>
         <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
           Backend: localhost:8000

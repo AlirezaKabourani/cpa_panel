@@ -7,6 +7,7 @@ class Customer(Base):
     code = Column(String, unique=True, index=True)   # slug
     name = Column(String, unique=True, index=True)
     service_id = Column(String, nullable=False)
+    default_splus_token = Column(Text, nullable=True)
     created_at = Column(String, nullable=False)
 
 class CustomerMessage(Base):

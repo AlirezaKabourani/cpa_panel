@@ -31,3 +31,19 @@ export async function apiPostForm<T>(path: string, formData: FormData): Promise<
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function apiPut<T>(path: string, body?: any): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return handle<T>(res);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+  });
+  return handle<T>(res);
+}

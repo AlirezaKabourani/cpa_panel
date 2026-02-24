@@ -12,36 +12,6 @@ const DatePicker =
 
 
 
-type NewCustomerPayload = { name: string; service_id: string; code?: string };
-
-function Modal(props: { open: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
-  if (!props.open) return null;
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.35)",
-        display: "grid",
-        placeItems: "center",
-        zIndex: 1000,
-      }}
-      onMouseDown={props.onClose}
-    >
-      <div
-        style={{ width: 520, background: "#fff", borderRadius: 12, padding: 16 }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>{props.title}</h3>
-          <button onClick={props.onClose}>✕</button>
-        </div>
-        <div style={{ marginTop: 12 }}>{props.children}</div>
-      </div>
-    </div>
-  );
-}
-
 export default function CampaignBuilder() {
   const [platform, setPlatform] = useState<"rubika" | "splus">("rubika");
   const theme = useMemo(
@@ -88,11 +58,6 @@ export default function CampaignBuilder() {
   // Save suggestion checkbox
   const [saveAsSuggestion, setSaveAsSuggestion] = useState(false);
   const [suggestionTitle, setSuggestionTitle] = useState("");
-
-  // Add customer modal
-  const [addOpen, setAddOpen] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [newCustomerServiceId, setNewCustomerServiceId] = useState("");
 
   const [status, setStatus] = useState<string>("");
 
@@ -212,9 +177,11 @@ export default function CampaignBuilder() {
   }
 
   async function loadCustomers() {
-    const list = await apiGet<Customer[]>("/customers");
+    const list = await apiGet<Customer[]>(`/customers?platform=${platform}`);
     setCustomers(list);
-    if (!selectedCustomerId && list.length) setSelectedCustomerId(list[0].id);
+    if (!list.some((x) => x.id === selectedCustomerId)) {
+      setSelectedCustomerId(list.length ? list[0].id : "");
+    }
   }
 
   async function loadCustomerExtras(customerId: string) {
@@ -285,37 +252,24 @@ export default function CampaignBuilder() {
   }, []);
 
   useEffect(() => {
+    loadCustomers().catch((e) => setStatus(`Error: ${String(e.message || e)}`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [platform]);
+
+  useEffect(() => {
     if (!selectedCustomerId) return;
     loadCustomerExtras(selectedCustomerId).catch((e) => setStatus(`Error: ${String(e.message || e)}`));
   }, [selectedCustomerId, platform]);
 
   useEffect(() => {
+    if (platform !== "splus") return;
+    setToken(selectedCustomer?.default_splus_token || "");
+  }, [platform, selectedCustomer]);
+
+  useEffect(() => {
     const msg = messages.find((x) => x.id === selectedMessageId);
     if (msg) setMessageText(msg.text_template);
   }, [selectedMessageId, messages]);
-
-  async function onAddCustomer() {
-    setStatus("");
-    const payload: NewCustomerPayload = {
-      name: newCustomerName.trim(),
-      service_id: newCustomerServiceId.trim(),
-    };
-    if (!payload.name || !payload.service_id) {
-      setStatus("Please enter customer name and service_id.");
-      return;
-    }
-    try {
-      const res = await apiPost<{ id: string; code: string }>("/customers", payload);
-      setAddOpen(false);
-      setNewCustomerName("");
-      setNewCustomerServiceId("");
-      await loadCustomers();
-      setSelectedCustomerId(res.id);
-      setStatus("Customer added.");
-    } catch (e: any) {
-      setStatus(`Error adding customer: ${e.message || e}`);
-    }
-  }
 
   async function saveSuggestion() {
     if (!selectedCustomer) {
@@ -442,7 +396,6 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>Create Campaign (Step 1)</h2>
-        <button onClick={() => setAddOpen(true)}>+ Add customer</button>
       </div>
 
       {status && (
@@ -513,7 +466,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
                 <option value="">(No media)</option>
                 {media.map((m) => (
                   <option key={m.id} value={m.file_id}>
-                    {m.file_id}{m.file_name ? ` — ${m.file_name}` : ""}
+                    {m.file_id}{m.file_name ? ` - ${m.file_name}` : ""}
                   </option>
                 ))}
               </select>
@@ -557,7 +510,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
               {media.map((m) => (
                 <li key={m.id}>
                   <span style={{ fontFamily: "monospace" }}>{m.file_id}</span>
-                  {m.file_name ? <span> — {m.file_name}</span> : null}
+                  {m.file_name ? <span> - {m.file_name}</span> : null}
                   {m.file_type ? <span style={{ color: "#666" }}> ({m.file_type})</span> : null}
                 </li>
               ))}
@@ -582,7 +535,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
 
     {snapshotId && (
       <div style={{ fontSize: 12, color: "#666" }}>
-        Snapshot: <span style={{ fontFamily: "monospace" }}>{snapshotId}</span> — Rows: {audienceRowCount}
+        Snapshot: <span style={{ fontFamily: "monospace" }}>{snapshotId}</span> - Rows: {audienceRowCount}
       </div>
     )}
   </div>
@@ -661,7 +614,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
                       </div>
                       <div style={{ fontSize: 12, color: "#666" }}>
                         {m.text_template.slice(0, 70)}
-                        {m.text_template.length > 70 ? "…" : ""}
+                        {m.text_template.length > 70 ? "..." : ""}
                       </div>
                     </div>
                   </label>
@@ -679,7 +632,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
             />
             {!messageText.includes("%s") && (
               <div style={{ marginTop: 8, color: "#b45309", fontSize: 13 }}>
-                ⚠️ Your message does not include <code>%s</code>. The selected platform needs it to inject the link.
+                Warning: your message does not include <code>%s</code>. The selected platform needs it to inject the link.
               </div>
             )}
 
@@ -809,7 +762,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
                   <td style={{ padding: "6px 0" }}>{r.customer_name || "-"}</td>
                   <td style={{ padding: "6px 0" }}>{r.campaign_name || "-"}</td>
                   <td style={{ padding: "6px 0" }}>
-                    {r.status}{r.has_token ? " 🔐" : ""}
+                    {r.status}{r.has_token ? " [locked]" : ""}
                   </td>
                   <td style={{ padding: "6px 0", fontFamily: "monospace", fontSize: 12 }}>{r.campaign_id}</td>
                   <td style={{ padding: "6px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -852,7 +805,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
         <h3 style={{ marginTop: 0 }}>Last Run Log</h3>
 
         {!lastRunId ? (
-          <div style={{ color: "#666" }}>No run yet. Use “Send Test” or “Run Now”.</div>
+          <div style={{ color: "#666" }}>No run yet. Use "Send Test" or "Run Now".</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ fontSize: 12, color: "#666" }}>
@@ -879,38 +832,7 @@ function tehranPickerToUtcIso(dateObj: DateObject, hhmm: string): string {
         )}
       </div>
 
-
-
-
-
-      {/* Add customer modal */}
-      <Modal open={addOpen} title="Add new customer" onClose={() => setAddOpen(false)}>
-        <div style={{ display: "grid", gap: 10 }}>
-          <label>
-            Customer name
-            <input
-              value={newCustomerName}
-              onChange={(e) => setNewCustomerName(e.target.value)}
-              placeholder="e.g., TechnoPay"
-              style={{ width: "100%", padding: 8, borderRadius: 8 }}
-            />
-          </label>
-          <label>
-            Service ID
-            <input
-              value={newCustomerServiceId}
-              onChange={(e) => setNewCustomerServiceId(e.target.value)}
-              placeholder="e.g., 693e7fb4..."
-              style={{ width: "100%", padding: 8, borderRadius: 8, fontFamily: "monospace" }}
-            />
-          </label>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button onClick={() => setAddOpen(false)}>Cancel</button>
-            <button onClick={onAddCustomer}>Create</button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
+
