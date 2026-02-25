@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../api/client";
+import { Link } from "react-router-dom";
 
 type DashRow = {
   run_id: string;
@@ -12,6 +13,9 @@ type DashRow = {
   finished_at: string | null;
   has_log: boolean;
   has_result: boolean;
+  progress_current?: number | null;
+  progress_total?: number | null;
+  progress_pct?: number | null;
 };
 
 function formatTehran(isoUtc: string | null): string {
@@ -88,25 +92,36 @@ export default function Dashboard() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th align="left" style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>Run At (Tehran)</th>
-              <th align="left" style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>Customer</th>
-              <th align="left" style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>Campaign</th>
-              <th align="left" style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>Status</th>
-              <th align="left" style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>Run ID</th>
-              <th align="left" style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>Actions</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Run At (Tehran)</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Customer</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Campaign</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Progress</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Status</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Run ID</th>
+              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
-              <tr key={r.run_id} style={{ borderBottom: "1px solid #f4f4f4" }}>
-                <td style={{ padding: "8px 0", fontFamily: "monospace", fontSize: 12 }}>
+            {filtered.map((r, idx) => (
+              <tr key={r.run_id} style={{ borderBottom: "1px solid #edf2f7", background: idx % 2 === 0 ? "#ffffff" : "#f8fbff" }}>
+                <td style={{ padding: "10px 8px", fontFamily: "'Vazirmatn','IRANSansX','Tahoma',sans-serif", fontSize: 14, fontWeight: 510 }}>
                   {formatTehran(r.started_at)}
                 </td>
-                <td style={{ padding: "8px 0" }}>{r.customer_name || "-"}</td>
-                <td style={{ padding: "8px 0" }}>{r.campaign_name || "-"}</td>
-                <td style={{ padding: "8px 0" }}>{r.status}</td>
-                <td style={{ padding: "8px 0", fontFamily: "monospace", fontSize: 12 }}>{r.run_id}</td>
-                <td style={{ padding: "8px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <td style={{ padding: "10px 8px" }}>{r.customer_name || "-"}</td>
+                <td style={{ padding: "10px 8px" }}>{r.campaign_name || "-"}</td>
+                <td style={{ padding: "10px 8px", fontFamily: "monospace", fontSize: 12 }}>
+                  {r.progress_current != null && r.progress_total != null
+                    ? `${r.progress_current}/${r.progress_total} (${r.progress_pct ?? 0}%)`
+                    : "-"}
+                </td>
+                <td style={{ padding: "10px 8px" }}>{r.status}</td>
+                <td style={{ padding: "10px 8px", fontFamily: "monospace", fontSize: 12 }}>{r.run_id}</td>
+                <td style={{ padding: "10px 8px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {r.has_log && (
+                    <Link to={`/runs/${r.run_id}/live-log`}>
+                      <button>Live Log</button>
+                    </Link>
+                  )}
                   {r.has_log && (
                     <button onClick={() => window.open(`${API_BASE}/runs/${r.run_id}/log/download`, "_blank")}>
                       Download log
@@ -121,7 +136,7 @@ export default function Dashboard() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: "12px 0", color: "#666" }}>No runs.</td></tr>
+              <tr><td colSpan={7} style={{ padding: "12px 8px", color: "#666" }}>No runs.</td></tr>
             )}
           </tbody>
         </table>

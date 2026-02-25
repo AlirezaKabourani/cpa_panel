@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,9 +11,20 @@ from ..runners.rscript_runner import run_r_campaign
 from ..runners.splus_runner import run_splus_campaign
 
 router = APIRouter()
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+RUNS_DIR = PROJECT_ROOT / "data" / "runs"
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def prepare_run_paths(run_id: str) -> tuple[str, str]:
+    run_dir = RUNS_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "run.log"
+    if not log_path.exists():
+        log_path.write_text("Run started...\n", encoding="utf-8")
+    return str(run_dir), str(log_path)
 
 
 def normalize_platform(raw: object) -> str:
@@ -116,14 +128,15 @@ def send_test(campaign_id: str, payload: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="campaign missing customer or snapshot")
 
     rid = str(uuid.uuid4())
+    run_dir, log_path = prepare_run_paths(rid)
     r = Run(
         id=rid,
         campaign_id=c.id,
         status="running",
         started_at=now_iso(),
         finished_at=None,
-        log_path=None,
-        artifacts_path=None,
+        log_path=log_path,
+        artifacts_path=run_dir,
         result_json=None,
     )
     db.add(r)
@@ -139,6 +152,7 @@ def send_test(campaign_id: str, payload: dict, db: Session = Depends(get_db)):
                 message_text=c.message_text,
                 test_number=str(test_number) if test_number else (c.test_number or "989024004940"),
                 run_id=rid,
+                scenario_name=c.name or c.id,
             )
         else:
             out = run_r_campaign(
@@ -190,14 +204,15 @@ def run_now(campaign_id: str, payload: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="campaign missing customer or snapshot")
 
     rid = str(uuid.uuid4())
+    run_dir, log_path = prepare_run_paths(rid)
     r = Run(
         id=rid,
         campaign_id=c.id,
         status="running",
         started_at=now_iso(),
         finished_at=None,
-        log_path=None,
-        artifacts_path=None,
+        log_path=log_path,
+        artifacts_path=run_dir,
         result_json=None,
     )
     db.add(r)
@@ -213,6 +228,7 @@ def run_now(campaign_id: str, payload: dict, db: Session = Depends(get_db)):
                 message_text=c.message_text,
                 test_number=None,
                 run_id=rid,
+                scenario_name=c.name or c.id,
             )
         else:
             out = run_r_campaign(
