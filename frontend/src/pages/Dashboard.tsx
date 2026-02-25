@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../api/client";
 import { Link } from "react-router-dom";
+import "./Dashboard.css";
 
 type DashRow = {
   run_id: string;
@@ -41,6 +42,14 @@ export default function Dashboard() {
   const [q, setQ] = useState<string>("");
 
   const filtered = useMemo(() => rows, [rows]);
+  const summary = useMemo(() => {
+    const total = filtered.length;
+    const running = filtered.filter((r) => r.status.toLowerCase() === "running").length;
+    const success = filtered.filter((r) => r.status.toLowerCase() === "success").length;
+    const failed = filtered.filter((r) => r.status.toLowerCase() === "failed").length;
+    const successRate = total ? Math.round((success / total) * 100) : 0;
+    return { total, running, success, failed, successRate };
+  }, [filtered]);
 
   async function load() {
     const params = new URLSearchParams();
@@ -59,87 +68,138 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2 style={{ marginTop: 0 }}>Dashboard</h2>
+    <div className="dash-page">
+      <div className="dash-toolbar">
+        <h2>Dashboard</h2>
+        <div className="dash-toolbar-actions">
+          <button className="ghost-btn" onClick={load}>Refresh</button>
+          <button
+            className="ghost-btn"
+            onClick={() => {
+              setStatus("");
+              setCustomerId("");
+              setQ("");
+            }}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-label">Total Runs</div>
+          <div className="kpi-value">{summary.total}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Running</div>
+          <div className="kpi-value">{summary.running}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Failed</div>
+          <div className="kpi-value">{summary.failed}</div>
+        </div>
+        <div className="kpi-card kpi-card-accent">
+          <div className="kpi-label">Success Rate</div>
+          <div className="kpi-value">{summary.successRate}%</div>
+          <div className="kpi-sub">{summary.success} successful runs</div>
+        </div>
+      </div>
+
+      <div className="filters-card">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="field">
           <option value="">All statuses</option>
-          <option value="success">success</option>
-          <option value="failed">failed</option>
-          <option value="running">running</option>
+          <option value="success">Success</option>
+          <option value="failed">Failed</option>
+          <option value="running">Running</option>
         </select>
 
         <input
           value={customerId}
           onChange={(e) => setCustomerId(e.target.value)}
-          placeholder="Customer ID (optional)"
-          style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd", minWidth: 280 }}
+          placeholder="Customer ID"
+          className="field"
         />
 
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search (customer/campaign name)"
-          style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd", minWidth: 280 }}
+          placeholder="Search customer/campaign"
+          className="field"
         />
 
-        <button onClick={load}>Apply</button>
-        <button onClick={() => { setStatus(""); setCustomerId(""); setQ(""); }}>Clear</button>
+        <button className="primary-btn" onClick={load}>Apply Filters</button>
       </div>
 
-      <div style={{ marginTop: 12, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Run At (Tehran)</th>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Customer</th>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Campaign</th>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Progress</th>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Status</th>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Run ID</th>
-              <th align="left" style={{ borderBottom: "1px solid #dbeafe", background: "#cbe1fd", padding: "10px 8px" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r, idx) => (
-              <tr key={r.run_id} style={{ borderBottom: "1px solid #edf2f7", background: idx % 2 === 0 ? "#ffffff" : "#f8fbff" }}>
-                <td style={{ padding: "10px 8px", fontFamily: "'Vazirmatn','IRANSansX','Tahoma',sans-serif", fontSize: 14, fontWeight: 510 }}>
-                  {formatTehran(r.started_at)}
-                </td>
-                <td style={{ padding: "10px 8px" }}>{r.customer_name || "-"}</td>
-                <td style={{ padding: "10px 8px" }}>{r.campaign_name || "-"}</td>
-                <td style={{ padding: "10px 8px", fontFamily: "monospace", fontSize: 12 }}>
-                  {r.progress_current != null && r.progress_total != null
-                    ? `${r.progress_current}/${r.progress_total} (${r.progress_pct ?? 0}%)`
-                    : "-"}
-                </td>
-                <td style={{ padding: "10px 8px" }}>{r.status}</td>
-                <td style={{ padding: "10px 8px", fontFamily: "monospace", fontSize: 12 }}>{r.run_id}</td>
-                <td style={{ padding: "10px 8px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {r.has_log && (
-                    <Link to={`/runs/${r.run_id}/live-log`}>
-                      <button>Live Log</button>
-                    </Link>
-                  )}
-                  {r.has_log && (
-                    <button onClick={() => window.open(`${API_BASE}/runs/${r.run_id}/log/download`, "_blank")}>
-                      Download log
-                    </button>
-                  )}
-                  {r.has_result && (
-                    <button onClick={() => window.open(`${API_BASE}/runs/${r.run_id}/result/download`, "_blank")}>
-                      Send Result
-                    </button>
-                  )}
-                </td>
+      <div className="table-card">
+        <div className="table-header">
+          <h3>Transaction Overview</h3>
+          <span>{filtered.length} results</span>
+        </div>
+
+        <div className="table-wrap">
+          <table className="runs-table">
+            <thead>
+              <tr>
+                <th>Run At (Tehran)</th>
+                <th>Customer</th>
+                <th>Campaign</th>
+                <th>Progress</th>
+                <th>Status</th>
+                <th>Run ID</th>
+                <th>Actions</th>
               </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: "12px 8px", color: "#666" }}>No runs.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.run_id}>
+                  <td className="tehran-time">{formatTehran(r.started_at)}</td>
+                  <td>{r.customer_name || "-"}</td>
+                  <td>{r.campaign_name || "-"}</td>
+                  <td className="mono-text">
+                    {r.progress_current != null && r.progress_total != null
+                      ? `${r.progress_current}/${r.progress_total} (${r.progress_pct ?? 0}%)`
+                      : "-"}
+                  </td>
+                  <td>
+                    <span className={`status-badge status-${r.status.toLowerCase()}`}>{r.status}</span>
+                  </td>
+                  <td className="mono-text">{r.run_id}</td>
+                  <td>
+                    <div className="row-actions">
+                      {r.has_log && (
+                        <Link to={`/runs/${r.run_id}/live-log`}>
+                          <button className="ghost-btn">Live Log</button>
+                        </Link>
+                      )}
+                      {r.has_log && (
+                        <button
+                          className="ghost-btn"
+                          onClick={() => window.open(`${API_BASE}/runs/${r.run_id}/log/download`, "_blank")}
+                        >
+                          Download Log
+                        </button>
+                      )}
+                      {r.has_result && (
+                        <button
+                          className="ghost-btn"
+                          onClick={() => window.open(`${API_BASE}/runs/${r.run_id}/result/download`, "_blank")}
+                        >
+                          Send Result
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="empty-cell">No runs found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

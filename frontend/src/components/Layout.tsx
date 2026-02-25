@@ -1,30 +1,43 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
+import "./Layout.css";
 
 export default function Layout() {
-  const loc = useLocation();
-  const active = (path: string) => (loc.pathname === path ? { fontWeight: 700 } : undefined);
-
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", height: "100vh" }}>
-      <aside style={{ borderRight: "1px solid #eee", padding: 16 }}>
-        <div style={{ fontWeight: 800, marginBottom: 12 }}>CPA_Panel</div>
-        <nav style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <Link to="/" style={{ textDecoration: "none", color: "#111", ...active("/") }}>
-            Dashboard
-          </Link>
-          <Link to="/campaign" style={{ textDecoration: "none", color: "#111", ...active("/campaign") }}>
-            Create Campaign
-          </Link>
-          <Link to="/customers" style={{ textDecoration: "none", color: "#111", ...active("/customers") }}>
-            Customers
-          </Link>
-        </nav>
-        <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
-          Backend: localhost:8000
+    <div className="app-shell">
+      <aside className="side-panel">
+        <div className="brand-header">
+          <div className="brand-row">
+            <img src="/CPA_PANEL_LOGO.png" alt="CPA Panel logo" className="brand-logo" />
+            <div className="brand-title">CPA Panel</div>
+          </div>
+        </div>
+
+        <div className="side-menu-area">
+          <nav className="side-nav side-nav-primary">
+            <NavLink to="/" end className={({ isActive }) => `side-link ${isActive ? "active" : ""}`}>
+              Dashboard
+            </NavLink>
+          </nav>
+
+          <div className="side-divider" />
+          <div className="side-section-title">Management</div>
+          <nav className="side-nav">
+            <NavLink to="/campaign" className={({ isActive }) => `side-link ${isActive ? "active" : ""}`}>
+              Create Campaign
+            </NavLink>
+            <NavLink to="/customers" className={({ isActive }) => `side-link ${isActive ? "active" : ""}`}>
+              Customers
+            </NavLink>
+          </nav>
+        </div>
+
+        <div className="side-footer">
+          <div className="side-footer-label">Backend</div>
+          <div className="side-footer-value">localhost:8000</div>
         </div>
       </aside>
 
-      <main style={{ padding: 16, overflow: "auto" }}>
+      <main className="page-area">
         <Outlet />
       </main>
     </div>

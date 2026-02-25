@@ -1,0 +1,138 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+  background: #eef2f7;
+  color: #0f172a;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-right: 1px solid #dce4ef;
+  background: #f8fafc;
+}
+
+.brand-header {
+  padding: 22px 16px 16px;
+  border-bottom: 1px solid #dce4ef;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+}
+
+.brand-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.brand-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #3949d8;
+}
+
+.side-menu-area {
+  padding: 16px;
+}
+
+.side-nav-primary {
+  margin-bottom: 14px;
+}
+
+.side-divider {
+  border-top: 1px dashed #d9e2ef;
+  margin: 0 2px 14px;
+}
+
+.side-section-title {
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.side-link {
+  padding: 10px;
+  border-radius: 10px;
+  color: #334155;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.side-link:hover {
+  background: #eef3fb;
+}
+
+.side-link.active {
+  color: #3f3ef4;
+  background: #eef1f6;
+  border-color: #e4e9f3;
+  box-shadow: inset 3px 0 0 #4f46e5;
+}
+
+.side-footer {
+  margin-top: auto;
+  margin: auto 16px 16px;
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.side-footer-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.side-footer-value {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.page-area {
+  padding: 22px;
+  overflow: auto;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    border-right: none;
+    border-bottom: 1px solid #dce4ef;
+  }
+
+  .brand-title {
+    font-size: 22px;
+  }
+
+  .brand-logo {
+    width: 34px;
+    height: 34px;
+  }
+
+  .page-area {
+    padding: 14px;
+  }
+}
